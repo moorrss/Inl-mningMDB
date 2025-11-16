@@ -1,74 +1,70 @@
+--Listar alla kontaktpersoner till respektive företag
 SELECT
-    s.Name AS Leverantör,
-    a.AddressLine || ', ' || p.PostalCode || ' ' || c.City AS Huvudadress,
+    Suppliers.Name AS Företag,
+    Contacts.FirstName || ' ' || Contacts.LastName AS Kontaktperson,
+    PhoneNumbers.PNumber AS Telefon,
+    EmailAddress.Email AS Epost
+FROM
+    Contacts
+    JOIN Suppliers ON Contacts.SupplierId = Suppliers.Id
+    LEFT JOIN ContactsPN ON Contacts.Id = ContactsPN.ContactsId
+    LEFT JOIN PhoneNumbers ON ContactsPN.PhoneId = PhoneNumbers.Id
+    LEFT JOIN ContactsEmail ON Contacts.Id = ContactsEmail.ContactsId
+    LEFT JOIN EmailAddress ON ContactsEmail.EmailId = EmailAddress.Id;
 
-    GROUP_CONCAT(DISTINCT pn.PNumber) AS Telefonnummer,
-    GROUP_CONCAT(DISTINCT ea.Email) AS Epostadresser
-FROM Suppliers s
-LEFT JOIN Addresses a ON s.AddressId = a.Id
-LEFT JOIN PostalCodes p ON a.PostalCodeId = p.Id
-LEFT JOIN Cities c ON p.CityId = c.Id
-LEFT JOIN SuppliersPN spn ON s.Id = spn.SuppliersId
-LEFT JOIN PhoneNumbers pn ON spn.PhoneId = pn.Id
-LEFT JOIN SuppliersEmail sem ON s.Id = sem.SuppliersId
-LEFT JOIN EmailAddress ea ON sem.EmailId = ea.Id
-GROUP BY s.Id, s.Name, Huvudadress;
-
+--Listar alla företag med address mm...
 SELECT
-    s.Name AS Leverantör,
-    c.FirstName || ' ' || c.LastName AS Kontaktperson,
-    GROUP_CONCAT(DISTINCT pn.PNumber) AS Telefon,
-    GROUP_CONCAT(DISTINCT ea.Email) AS Epost
-FROM Contacts c
-JOIN Suppliers s ON c.SupplierId = s.Id
-LEFT JOIN ContactsPN cpn ON c.Id = cpn.ContactsId
-LEFT JOIN PhoneNumbers pn ON cpn.PhoneId = pn.Id
-LEFT JOIN ContactsEmail cem ON c.Id = cem.ContactsId
-LEFT JOIN EmailAddress ea ON cem.EmailId = ea.Id
-GROUP BY s.Name, Kontaktperson
-ORDER BY s.Name;
+    Suppliers.Name AS Företag,
+    Addresses.AddressLine || ', ' || PostalCodes.PostalCode || ' ' || Cities.City AS Huvudadress,
+    PhoneNumbers.PNumber AS Telefon,
+    EmailAddress.Email AS Epost
+FROM
+    Suppliers
+    LEFT JOIN Addresses ON Suppliers.AddressId = Addresses.Id
+    LEFT JOIN PostalCodes ON Addresses.PostalCodeId = PostalCodes.Id
+    LEFT JOIN Cities ON PostalCodes.CityId = Cities.Id
+    LEFT JOIN SuppliersPN ON Suppliers.Id = SuppliersPN.SuppliersId
+    LEFT JOIN PhoneNumbers ON SuppliersPN.PhoneId = PhoneNumbers.Id
+    LEFT JOIN SuppliersEmail ON Suppliers.Id = SuppliersEmail.SuppliersId
+    LEFT JOIN EmailAddress ON SuppliersEmail.EmailId = EmailAddress.Id;
 
+--Listar alla produkter där de börjar ta slut i lagert
 SELECT
-    s.Name AS Leverantör,
-    i.ItemNumber AS Artikelnummer,
-    i.Name AS Råvara,
-    i.PricePerKg AS Pris_per_Kg
-FROM Suppliers s
-JOIN SupplierCatalog sc ON s.Id = sc.SupplierId
-JOIN Ingredients i ON sc.IngredientId = i.Id
-ORDER BY s.Name, i.Name;
+    Ingredients.Name AS Råvara_att_köpa,
+    Ingredients.StockQuantity AS Kvar_i_lager_kg,
+    Suppliers.Name AS Leverantör,
+    Ingredients.PricePerKg AS Senaste_pris_per_kg
+FROM
+    Ingredients
+    JOIN SupplierCatalog ON Ingredients.Id = SupplierCatalog.IngredientId
+    JOIN Suppliers ON SupplierCatalog.SupplierId = Suppliers.Id
+WHERE
+    Ingredients.StockQuantity < 20.0;
 
-SELECT
-    p.Name AS Produkt,
-    i.Name AS Råvara,
-    ri.StockQuantity AS Mängd_i_recept
-FROM Products p
-JOIN RecipeIngredients ri ON p.Id = ri.ProductId
-JOIN Ingredients i ON ri.IngredientId = i.Id
-ORDER BY p.Name, i.Name;
+--Listar äppelkaka med vilka ingridienser från vilket företag.
+SELECT DISTINCT
+    Products.Name AS Produkt,
+    Ingredients.Name AS Råvara_som_behövs,
+    Suppliers.Name AS Leverantör_att_kontakta
+FROM
+    Products
+    JOIN RecipeIngredients ON Products.Id = RecipeIngredients.ProductId
+    JOIN Ingredients ON RecipeIngredients.IngredientId = Ingredients.Id
+    JOIN SupplierCatalog ON Ingredients.Id = SupplierCatalog.IngredientId
+    JOIN Suppliers ON SupplierCatalog.SupplierId = Suppliers.Id
+WHERE
+    Products.Name = 'Äppelkaka';
 
+--Listar den totala utgifterna
 SELECT
-    ItemNumber AS Artikelnummer,
-    Name AS Råvara,
-    PricePerKg AS Pris_per_Kg
-FROM Ingredients
-ORDER BY Name;
-
-SELECT
-    Name AS Råvara,
-    StockQuantity AS Lagerkvantitet_kg,
-    ItemNumber AS Artikelnummer
-FROM Ingredients
-ORDER BY Lagerkvantitet_kg ASC;
-
-SELECT
-    p.Date AS Inköpsdatum,
-    s.Name AS Leverantör,
-    i.Name AS Råvara,
-    pl.StockQuantity AS Inköpt_Kvantitet_kg,
-    pl.PurchasesPrice AS Inköpspris_per_kg
-FROM Purchases p
-JOIN Suppliers s ON p.SupplierId = s.Id
-JOIN PurchaseLines pl ON p.Id = pl.PurchaseId
-JOIN Ingredients i ON pl.IngredientId = i.Id
-ORDER BY p.Date DESC;
+    Suppliers.Name AS Leverantör,
+    SUM(
+        PurchaseLines.StockQuantity * PurchaseLines.PurchasesPrice
+    ) AS Totalt_Inköpsbelopp
+FROM
+    Suppliers
+    JOIN Purchases ON Suppliers.Id = Purchases.SupplierId
+    JOIN PurchaseLines ON Purchases.Id = PurchaseLines.PurchaseId
+GROUP BY
+    Suppliers.Name
+ORDER BY Totalt_Inköpsbelopp DESC;
